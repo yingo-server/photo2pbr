@@ -1,0 +1,51 @@
+name: ci
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    # 本项目只针对 Windows 环境构建
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: [ "3.11", "3.12" ]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install
+        run: |
+          python -m pip install -U pip
+          python -m pip install -e ".[dev]"
+
+      - name: Unit tests
+        run: python -m pytest -q
+
+      - name: Smoke test (CLI demo, end-to-end)
+        run: python -m photo2pbr demo --out dist/demo --width 240 --height 180
+
+      - name: Preview sheet (relight round-trip)
+        run: python -m photo2pbr preview --bundle dist/demo --out dist/demo/sheet.png
+
+      - name: Upload demo artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: demo-py${{ matrix.python-version }}
+          path: dist/demo
+          if-no-files-found: warn
